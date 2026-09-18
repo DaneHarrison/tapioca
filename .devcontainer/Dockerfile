@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libyaml-dev \
     libsqlite3-dev \
+    zlib1g-dev \
     curl \
     unzip \
     ca-certificates \
