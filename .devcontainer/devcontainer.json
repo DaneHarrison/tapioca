@@ -1,0 +1,19 @@
+{
+  "name": "tapioca",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=tapioca-bundle,target=/usr/local/bundle,type=volume"
+  ],
+  "postCreateCommand": "bash bin/setup",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Shopify.ruby-lsp"
+      ]
+    }
+  }
+}
