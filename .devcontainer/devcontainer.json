@@ -14,7 +14,21 @@
     "vscode": {
       "extensions": [
         "Shopify.ruby-lsp"
-      ]
+      ],
+      "settings": {
+        // Watchman isn't packaged for Debian trixie. Edits made in the editor still
+        // reach Sorbet over LSP; only changes made outside it (e.g. git checkout)
+        // need a Sorbet restart to be picked up.
+        "sorbet.lspConfigs": [
+          {
+            "id": "stable",
+            "name": "Sorbet",
+            "description": "Stable Sorbet release, without Watchman",
+            "cwd": "${workspaceFolder}",
+            "command": ["bundle", "exec", "srb", "typecheck", "--lsp", "--disable-watchman"]
+          }
+        ]
+      }
     }
   }
 }
