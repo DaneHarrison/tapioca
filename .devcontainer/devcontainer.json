@@ -1,5 +1,6 @@
 {
-  "name": "tapioca",
+  "name": "shopify-tapioca",
+  "runArgs": ["--name", "shopify-tapioca"],
   "build": {
     "dockerfile": "Dockerfile"
   },

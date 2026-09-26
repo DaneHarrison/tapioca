@@ -24,12 +24,42 @@ don't have to manage Ruby versions or compile native gem extensions
   container) to run commands. These mirror what CI's `linters` job runs
   (`.github/workflows/ci.yml`):
   - `bin/test` — run the full test suite (or `bin/test spec/path/to/foo_spec.rb`
-    for a single file).
+    for a single file). See [`test.md`](test.md) for subsets and parallel runs.
   - `bin/style` — Rubocop.
   - `bin/typecheck` — Sorbet type check.
   - `bin/docs` / `bin/readme` — documentation verification.
   - `bundle exec exe/tapioca gem --verify` — check gem RBIs are up to date.
   - `bundle exec exe/tapioca check-shims` — check for duplicate shims.
+
+## Branch layout
+
+- `main` mirrors [Shopify/tapioca](https://github.com/Shopify/tapioca) `main`
+  exactly. Feature/PR branches start from here.
+- `docker-main` is `main` plus this Docker setup (`.devcontainer/` and
+  `.gitattributes`). It's the only branch that tracks these files.
+
+On `main` and feature branches, the Docker files are local, untracked files
+that git ignores, so they never end up in a commit or a PR.
+
+### One-time setup per clone
+
+```bash
+git remote add upstream https://github.com/Shopify/tapioca.git
+git remote set-url --push upstream NO_PUSH_TO_UPSTREAM   # can't push to Shopify by accident
+printf '.devcontainer/\n.gitattributes\n' >> .git/info/exclude
+git config alias.docker-on '!git restore --source=origin/docker-main --worktree -- .devcontainer .gitattributes'
+git checkout main && git docker-on
+```
+
+### Everyday commands
+
+| Task | Command |
+|---|---|
+| Sync `main` with Tapioca | `git checkout main && git pull upstream main && git push origin main` |
+| Start a feature | `git checkout -b fix/xyz main` |
+| Docker files missing | `git docker-on` |
+| Rebase `docker-main` onto new `main` | `git checkout docker-main && git rebase main && git push --force-with-lease` |
+| Change the Docker setup | `git checkout docker-main`, edit, commit (`git add -f`, because of the exclude rule), push, `git checkout <branch>`, `git docker-on` |
 
 ## Contribution workflow
 
