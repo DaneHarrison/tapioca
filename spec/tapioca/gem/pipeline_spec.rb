@@ -1836,6 +1836,53 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       assert_equal(output, compile)
     end
 
+    it "keeps signatures of methods defined in the block of an anonymous superclass" do
+      add_ruby_file("counter.rb", <<~RUBY)
+        class Counter < Struct.new(:x) do
+          extend T::Sig
+
+          sig { returns(Integer) }
+          attr_accessor :count
+
+          sig { returns(Integer) }
+          def total; 1; end
+
+          sig(:final) { returns(String) }
+          def label; ""; end
+        end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Counter < ::Struct
+          sig { returns(::Integer) }
+          def count; end
+
+          sig { params(count: ::Integer).returns(::Integer) }
+          def count=(count); end
+
+          sig(:final) { returns(::String) }
+          def label; end
+
+          sig { returns(::Integer) }
+          def total; end
+
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
     it "compiles Struct anonymous superclass methods overridden by a prepended module" do
       add_ruby_file("point.rb", <<~RUBY)
         module Rounded
