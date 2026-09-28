@@ -2052,6 +2052,59 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       assert_equal(output, compile)
     end
 
+    it "compiles methods of Class.new anonymous superclasses" do
+      add_ruby_file("foo.rb", <<~RUBY)
+        class Base
+          def base; end
+        end
+
+        class Foo < Class.new { def bar; end; def self.baz; end }
+        end
+
+        class Qux < Class.new(Base) { def quux; end }
+        end
+
+        class Deep < Class.new(Class.new { def deep; end }) { def shallow; end }
+        end
+
+        class Strict < Class.new { def self.==(other) = raise; def strict; end }
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Base
+          def base; end
+        end
+
+        class Deep
+          def deep; end
+          def shallow; end
+        end
+
+        class Foo
+          def bar; end
+
+          class << self
+            def baz; end
+          end
+        end
+
+        class Qux < ::Base
+          def quux; end
+        end
+
+        class Strict
+          def strict; end
+
+          class << self
+            def ==(other); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
     it "handles dynamic mixins" do
       add_ruby_file("foo.rb", <<~RUBY)
         module Foo
