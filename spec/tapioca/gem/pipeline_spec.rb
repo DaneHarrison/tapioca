@@ -2055,6 +2055,44 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       assert_equal(output, compile)
     end
 
+    it "does not compile mixins of anonymous superclasses performed in other gems" do
+      mock_gem("foo") do
+        add_ruby_file("lib/foo.rb", <<~RUBY)
+          class Foo < Struct.new(:x)
+          end
+        RUBY
+      end
+
+      mock_gem("bar") do
+        add_ruby_file("lib/bar.rb", <<~RUBY)
+          module Bar; end
+          module BarPrepend; end
+          module BarExtend; end
+
+          Foo.superclass.include(Bar)
+          Foo.superclass.prepend(BarPrepend)
+          Foo.superclass.extend(BarExtend)
+        RUBY
+      end
+
+      output = <<~RBI
+        class Foo < ::Struct
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile("foo"))
+    end
+
     it "does not repeat Struct anonymous superclass methods on grandchild classes" do
       add_ruby_file("point.rb", <<~RUBY)
         class Point < Struct.new(:x)
