@@ -1905,6 +1905,153 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       assert_equal(output, compile)
     end
 
+    it "compiles methods of Data anonymous superclasses the same as the block form" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Data.define(:x, :y)
+          def sum
+            x + y
+          end
+        end
+
+        BlockPoint = Data.define(:x, :y) do
+          def sum
+            x + y
+          end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class BlockPoint < ::Data
+          def sum; end
+          def x; end
+          def y; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class Point < ::Data
+          def sum; end
+          def x; end
+          def y; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles Data anonymous superclass methods overridden by the subclass or a prepended module" do
+      add_ruby_file("point.rb", <<~RUBY)
+        module Rounded
+          def y
+            super.round
+          end
+        end
+
+        class Point < Data.define(:x, :y)
+          prepend Rounded
+
+          def x
+            super.to_i
+          end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Data
+          include ::Rounded
+
+          def x; end
+          def y; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Rounded
+          def y; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles Data anonymous superclasses with no members" do
+      add_ruby_file("empty.rb", <<~RUBY)
+        class Empty < Data.define
+        end
+
+        BlockEmpty = Data.define
+      RUBY
+
+      output = template(<<~RBI)
+        class BlockEmpty < ::Data
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class Empty < ::Data
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "does not repeat Data anonymous superclass methods on grandchild classes" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Data.define(:x)
+        end
+
+        class Point3D < Point
+          def z; end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Data
+          def x; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class Point3D < ::Point
+          def z; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
     it "handles dynamic mixins" do
       add_ruby_file("foo.rb", <<~RUBY)
         module Foo
