@@ -81,8 +81,13 @@ module Tapioca
             signature = signature_defined_by_constant(method, constant)
             signature ||= inferred_attr_writer_signature(method, constant)
             method = signature.method if signature #: UnboundMethod
+            # Methods from anonymous superclasses aren't tracked for the constant, so the lookup falls back to
+            # their source location. sorbet-runtime wraps methods that have a `sig`, and the wrapper's location is
+            # in sorbet-runtime, so use the original method's location to see if the gem defined it.
+            unwrap_signature = owned_by_anonymous_superclass?(method, constant)
+            definition = @pipeline.method_definition_in_gem(method.name, constant, unwrap_signature: unwrap_signature)
 
-            case @pipeline.method_definition_in_gem(method.name, constant)
+            case definition
             when Pipeline::MethodUnknown
               # This means that this is a C-method. Thus, we want to
               # skip it only if the constant is an ignored one, since
@@ -203,6 +208,13 @@ module Tapioca
           end
 
           nil
+        end
+
+        # Check whether the method is defined by one of the constant's anonymous superclasses.
+        #: (UnboundMethod method, Module[top] constant) -> bool
+        def owned_by_anonymous_superclass?(method, constant)
+          owner = method.owner
+          @pipeline.anonymous_superclasses_of(constant).any? { |superclass| are_equal?(superclass, owner) }
         end
 
         # Return the signature declared on the given method, or nil if it has none.

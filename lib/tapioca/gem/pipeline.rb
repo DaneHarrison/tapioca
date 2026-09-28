@@ -151,9 +151,13 @@ module Tapioca
         end
       end
 
-      #: (Symbol method_name, Module[top] owner) -> MethodDefinitionLookupResult
-      def method_definition_in_gem(method_name, owner)
-        definitions = Tapioca::Runtime::Trackers::MethodDefinition.method_definitions_for(method_name, owner)
+      #: (Symbol method_name, Module[top] owner, ?unwrap_signature: bool) -> MethodDefinitionLookupResult
+      def method_definition_in_gem(method_name, owner, unwrap_signature: false)
+        definitions = Tapioca::Runtime::Trackers::MethodDefinition.method_definitions_for(
+          method_name,
+          owner,
+          unwrap_signature: unwrap_signature,
+        )
 
         # If the source location of the method isn't available, signal that by returning nil.
         return MethodUnknown.new if definitions.empty?
