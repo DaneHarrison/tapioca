@@ -24,12 +24,17 @@ module Tapioca
             registrations_for(method_name, owner) << loc
           end
 
-          #: (Symbol method_name, Module[top] owner) -> Array[SourceLocation]
-          def method_definitions_for(method_name, owner)
+          # Return where `method_name` was defined on `owner`. If no definitions were recorded for `owner` (for example,
+          # the method was defined on an anonymous superclass), fall back to the method's source location. A method
+          # with a `sig` is wrapped by sorbet-runtime, so `unwrap_signature` uses the location of the original method.
+          #: (Symbol method_name, Module[top] owner, ?unwrap_signature: bool) -> Array[SourceLocation]
+          def method_definitions_for(method_name, owner, unwrap_signature: false)
             definitions = registrations_for(method_name, owner)
 
             if definitions.empty?
-              source_loc = owner.instance_method(method_name).source_location
+              method = owner.instance_method(method_name)
+              method = Reflection.signature_of(method)&.method || method if unwrap_signature
+              source_loc = method.source_location
               definitions = [SourceLocation.from_loc(source_loc)].compact
             end
 

@@ -1678,7 +1678,19 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
         end
 
         module M3; end
-        class S1 < ::Struct; end
+
+        class S1 < ::Struct
+          def foo; end
+          def foo=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
 
         class S2 < ::Struct
           def foo; end
@@ -1706,7 +1718,577 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
           end
         end
 
-        class S4 < ::Struct; end
+        class S4 < ::Struct
+          def foo; end
+          def foo=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles methods of Struct anonymous superclasses the same as the block form" do
+      add_ruby_file("ssl_options.rb", <<~RUBY)
+        class SSLOptions < Struct.new(:verify_hostname)
+          def verify?; end
+        end
+
+        BlockSSLOptions = Struct.new(:verify_hostname) do
+          def verify?; end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class BlockSSLOptions < ::Struct
+          def verify?; end
+          def verify_hostname; end
+          def verify_hostname=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class SSLOptions < ::Struct
+          def verify?; end
+          def verify_hostname; end
+          def verify_hostname=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles named Struct superclasses like aws-sdk-core's EmptyStructure" do
+      add_ruby_file("structure.rb", <<~RUBY)
+        module Aws
+          module Structure
+            def initialize(values = {})
+              values.each do |k, v|
+                self[k] = v
+              end
+            end
+
+            def key?(member_name)
+              !self[member_name].nil?
+            end
+          end
+
+          class EmptyStructure < Struct.new("AwsEmptyStructure")
+            include(Aws::Structure)
+          end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        module Aws; end
+
+        class Aws::EmptyStructure < ::Struct
+          include ::Aws::Structure
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Aws::Structure
+          def initialize(values = T.unsafe(nil)); end
+
+          def key?(member_name); end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles named Struct superclasses defined in other gems" do
+      mock_gem("aws") do
+        add_ruby_file("lib/aws.rb", <<~RUBY)
+          EmptyStructure = Struct.new("EmptyStructure")
+          Credentials = Struct.new("Credentials", :key)
+        RUBY
+      end
+
+      mock_gem("foo") do
+        add_ruby_file("lib/foo.rb", <<~RUBY)
+          class EmptyA < EmptyStructure; end
+
+          class FooCredentials < Credentials
+            def secret; end
+          end
+        RUBY
+      end
+
+      output = <<~RBI
+        class EmptyA < ::Struct
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class FooCredentials < ::Struct
+          def key; end
+          def key=(_); end
+          def secret; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile("foo"))
+    end
+
+    it "compiles Struct anonymous superclass methods overridden or hidden by the subclass" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Struct.new(:x, :y, keyword_init: true)
+          def x
+            super.to_i
+          end
+
+          private :y=
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          def x; end
+          def x=(_); end
+          def y; end
+
+          private
+
+          def y=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "keeps signatures of methods defined in the block of an anonymous superclass" do
+      add_ruby_file("counter.rb", <<~RUBY)
+        class Counter < Struct.new(:x) do
+          extend T::Sig
+
+          sig { returns(Integer) }
+          attr_accessor :count
+
+          sig { returns(Integer) }
+          def total; 1; end
+
+          sig(:final) { returns(String) }
+          def label; ""; end
+        end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Counter < ::Struct
+          sig { returns(::Integer) }
+          def count; end
+
+          sig { params(count: ::Integer).returns(::Integer) }
+          def count=(count); end
+
+          sig(:final) { returns(::String) }
+          def label; end
+
+          sig { returns(::Integer) }
+          def total; end
+
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles source locations of methods from an anonymous superclass" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Struct.new(:x) do
+          extend T::Sig
+
+          sig { returns(Integer) }
+          def double; x * 2; end
+        end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:6
+        class Point < ::Struct
+          # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:5
+          sig { returns(::Integer) }
+          def double; end
+
+          # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+          def x; end
+
+          # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+          def x=(_); end
+
+          class << self
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def [](*_arg0); end
+
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def inspect; end
+
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def keyword_init?; end
+
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def members; end
+
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile(include_loc: true))
+    end
+
+    it "compiles Struct anonymous superclass methods overridden by a prepended module" do
+      add_ruby_file("point.rb", <<~RUBY)
+        module Rounded
+          def x
+            super.round
+          end
+        end
+
+        class Point < Struct.new(:x)
+          prepend Rounded
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          include ::Rounded
+
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Rounded
+          def x; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles Struct anonymous superclass methods behind a module prepended into the anonymous superclass" do
+      add_ruby_file("point.rb", <<~RUBY)
+        module Rounded
+          def x
+            super.round
+          end
+        end
+
+        class Point < Struct.new(:x) { prepend Rounded }
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          include ::Rounded
+
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Rounded
+          def x; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles mixins of Struct and Data anonymous superclasses" do
+      add_ruby_file("point.rb", <<~RUBY)
+        module Helpers; end
+        module ClassHelpers; end
+
+        class Point < Struct.new(:x) do
+          include Helpers
+          extend ClassHelpers
+        end
+        end
+
+        class Coordinate < Data.define(:x) { include Comparable }
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        module ClassHelpers; end
+
+        class Coordinate < ::Data
+          include ::Comparable
+
+          def x; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Helpers; end
+
+        class Point < ::Struct
+          include ::Helpers
+          extend ::ClassHelpers
+
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "does not compile mixins of anonymous superclasses performed in other gems" do
+      mock_gem("foo") do
+        add_ruby_file("lib/foo.rb", <<~RUBY)
+          class Foo < Struct.new(:x)
+          end
+        RUBY
+      end
+
+      mock_gem("bar") do
+        add_ruby_file("lib/bar.rb", <<~RUBY)
+          module Bar; end
+          module BarPrepend; end
+          module BarExtend; end
+
+          Foo.superclass.include(Bar)
+          Foo.superclass.prepend(BarPrepend)
+          Foo.superclass.extend(BarExtend)
+        RUBY
+      end
+
+      output = <<~RBI
+        class Foo < ::Struct
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile("foo"))
+    end
+
+    it "does not repeat Struct anonymous superclass methods on grandchild classes" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Struct.new(:x)
+        end
+
+        class Point3D < Point
+          def z; end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class Point3D < ::Point
+          def z; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles methods of Data anonymous superclasses the same as the block form" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Data.define(:x, :y)
+          def sum
+            x + y
+          end
+        end
+
+        BlockPoint = Data.define(:x, :y) do
+          def sum
+            x + y
+          end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class BlockPoint < ::Data
+          def sum; end
+          def x; end
+          def y; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class Point < ::Data
+          def sum; end
+          def x; end
+          def y; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles methods of Class.new anonymous superclasses" do
+      add_ruby_file("foo.rb", <<~RUBY)
+        class Base
+          def base; end
+        end
+
+        class Foo < Class.new { def bar; end; def self.baz; end }
+        end
+
+        class Qux < Class.new(Base) { def quux; end }
+        end
+
+        class Deep < Class.new(Class.new { def deep; end }) { def shallow; end }
+        end
+
+        class Strict < Class.new { def self.==(other) = raise; def strict; end }
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Base
+          def base; end
+        end
+
+        class Deep
+          def deep; end
+          def shallow; end
+        end
+
+        class Foo
+          def bar; end
+
+          class << self
+            def baz; end
+          end
+        end
+
+        class Qux < ::Base
+          def quux; end
+        end
+
+        class Strict
+          def strict; end
+
+          class << self
+            def ==(other); end
+          end
+        end
       RBI
 
       assert_equal(output, compile)

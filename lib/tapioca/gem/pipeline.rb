@@ -26,6 +26,7 @@ module Tapioca
         @gem = gem
         @seen = Set.new #: Set[String]
         @alias_namespace = Set.new #: Set[String]
+        @anonymous_superclasses = {}.compare_by_identity #: Hash[Module[top], Array[Module[top]]]
         @error_handler = error_handler
 
         @events = [] #: Array[Gem::Event]
@@ -150,9 +151,13 @@ module Tapioca
         end
       end
 
-      #: (Symbol method_name, Module[top] owner) -> MethodDefinitionLookupResult
-      def method_definition_in_gem(method_name, owner)
-        definitions = Tapioca::Runtime::Trackers::MethodDefinition.method_definitions_for(method_name, owner)
+      #: (Symbol method_name, Module[top] owner, ?unwrap_signature: bool) -> MethodDefinitionLookupResult
+      def method_definition_in_gem(method_name, owner, unwrap_signature: false)
+        definitions = Tapioca::Runtime::Trackers::MethodDefinition.method_definitions_for(
+          method_name,
+          owner,
+          unwrap_signature: unwrap_signature,
+        )
 
         # If the source location of the method isn't available, signal that by returning nil.
         return MethodUnknown.new if definitions.empty?
@@ -189,7 +194,43 @@ module Tapioca
         name
       end
 
+      # Return the superclasses between the constant and its first superclass that is written to the RBI,
+      # like the unnamed ones created by `class Foo < Struct.new(:bar)`, `Data.define` or `Class.new`,
+      # and named structs like `Struct.new("Bar", :baz)`, which are written as `Struct`.
+      # These superclasses are left out of the RBI, so their methods and mixins belong to the constant.
+      # For a singleton class, return the singleton classes of its attached class' anonymous superclasses.
+      #: (Module[top] constant) -> Array[Module[top]]
+      def anonymous_superclasses_of(constant)
+        @anonymous_superclasses[constant] ||= begin
+          superclasses = [] #: Array[Module[top]]
+
+          if constant.singleton_class?
+            # Singleton classes have no names, so find the anonymous superclasses through the attached class
+            attached_class = attached_class_of(T.cast(constant, T::Class[T.anything]))
+            if attached_class
+              superclasses = anonymous_superclasses_of(attached_class).map { |klass| singleton_class_of(klass) }
+            end
+          elsif Class === constant
+            superclass = superclass_of(constant) #: Class[top]?
+
+            while superclass && left_out_of_rbi?(superclass)
+              superclasses << superclass
+              superclass = superclass_of(superclass)
+            end
+          end
+
+          superclasses
+        end
+      end
+
       private
+
+      # `name_of` renames named structs like `Struct::Bar` to `Struct`, so they are left out of the RBI too
+      #: (Class[top] superclass) -> bool
+      def left_out_of_rbi?(superclass)
+        name = name_of(superclass)
+        name.nil? || (name == "Struct" && !are_equal?(superclass, ::Struct))
+      end
 
       #: (Gemfile::GemSpec gem) -> Set[String]
       def load_bootstrap_symbols(gem)

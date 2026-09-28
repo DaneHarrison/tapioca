@@ -60,10 +60,31 @@ module Tapioca
         #: (Module[top] constant, Module[top] mixin, Runtime::Trackers::Mixin::Type mixin_type) -> bool
         def mixed_in_by_gem?(constant, mixin, mixin_type)
           mixin_location = Runtime::Trackers::Mixin.mixin_location(mixin, mixin_type, constant)
+          mixin_location ||= anonymous_superclass_mixin_location(constant, mixin, mixin_type)
 
           return true if mixin_location.nil?
 
           @pipeline.gem.contains_path?(mixin_location)
+        end
+
+        # Find where the mixin was mixed into one of the constant's anonymous superclasses. Modules prepended
+        # into an anonymous superclass come after the constant in its ancestors, so they are listed as includes.
+        #: (Module[top] constant, Module[top] mixin, Runtime::Trackers::Mixin::Type mixin_type) -> String?
+        def anonymous_superclass_mixin_location(constant, mixin, mixin_type)
+          mixin_types = if mixin_type == Runtime::Trackers::Mixin::Type::Extend
+            [mixin_type]
+          else
+            [Runtime::Trackers::Mixin::Type::Include, Runtime::Trackers::Mixin::Type::Prepend]
+          end
+
+          @pipeline.anonymous_superclasses_of(constant).each do |superclass|
+            mixin_types.each do |type|
+              location = Runtime::Trackers::Mixin.mixin_location(mixin, type, superclass)
+              return location if location
+            end
+          end
+
+          nil
         end
 
         #: (String mixin_name) -> bool
@@ -75,7 +96,13 @@ module Tapioca
 
         #: (Module[top] constant) -> Array[Module[top]]
         def interesting_ancestors_of(constant)
-          inherited_ancestors = Set.new.compare_by_identity.merge(inherited_ancestors_of(constant))
+          # Anonymous superclasses are left out of the RBI, so their mixins are compiled on the constant.
+          # Only drop the ancestors inherited from the first named superclass, and the anonymous superclasses
+          # themselves, since named structs like `Struct::Foo` would otherwise be listed as includes.
+          anonymous_superclasses = @pipeline.anonymous_superclasses_of(constant)
+          inherited_ancestors = Set.new.compare_by_identity.merge(
+            inherited_ancestors_of(anonymous_superclasses.last || constant),
+          ).merge(anonymous_superclasses)
 
           # TODO: There is actually a bug here where this will drop modules that
           # may be included twice. For example:

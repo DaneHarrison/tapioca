@@ -46,7 +46,7 @@ module Tapioca
                 method = mod.instance_method(name)
                 method_visibility = visibility
 
-                if method.owner != mod
+                unless are_equal?(method.owner, mod)
                   # Use the visibility of the method `mod` itself defines, ignoring any modules prepended to it
                   method_visibility = visibility_defined_by_constant(name, mod) || visibility
                 end
@@ -81,8 +81,13 @@ module Tapioca
             signature = signature_defined_by_constant(method, constant)
             signature ||= inferred_attr_writer_signature(method, constant)
             method = signature.method if signature #: UnboundMethod
+            # Methods from anonymous superclasses aren't tracked for the constant, so the lookup falls back to
+            # their source location. sorbet-runtime wraps methods that have a `sig`, and the wrapper's location is
+            # in sorbet-runtime, so use the original method's location to see if the gem defined it.
+            unwrap_signature = owned_by_anonymous_superclass?(method, constant)
+            definition = @pipeline.method_definition_in_gem(method.name, constant, unwrap_signature: unwrap_signature)
 
-            case @pipeline.method_definition_in_gem(method.name, constant)
+            case definition
             when Pipeline::MethodUnknown
               # This means that this is a C-method. Thus, we want to
               # skip it only if the constant is an ignored one, since
@@ -186,18 +191,29 @@ module Tapioca
         # It walks up the ancestor tree via the `super_method` method; if any of the super
         # methods are owned by the constant, it means that the constant declares the method,
         # and that super method is returned.
+        #
+        # Methods owned by the constant's anonymous superclasses also count, since those
+        # superclasses are not part of the RBI and their methods would otherwise be lost.
         #: (UnboundMethod method, Module[top] constant) -> UnboundMethod?
         def method_defined_by_constant(method, constant)
+          owners = [constant, *@pipeline.anonymous_superclasses_of(constant)]
           # Widen the type of `method` to be nilable
           method = method #: UnboundMethod?
 
           while method
-            return method if method.owner == constant
+            # Compare by identity, since the constant or its anonymous superclasses can override `==`
+            return method if owners.any? { |owner| are_equal?(owner, method.owner) }
 
             method = method.super_method
           end
 
           nil
+        end
+
+        # Check whether the method is defined by one of the constant's anonymous superclasses.
+        #: (UnboundMethod method, Module[top] constant) -> bool
+        def owned_by_anonymous_superclass?(method, constant)
+          @pipeline.anonymous_superclasses_of(constant).any? { |superclass| are_equal?(superclass, method.owner) }
         end
 
         # Return the signature declared on the given method, or nil if it has none.
@@ -210,14 +226,14 @@ module Tapioca
         #: (UnboundMethod method, Module[top] constant) -> untyped
         def signature_defined_by_constant(method, constant)
           signature = signature_of!(method)
-          return signature if signature && signature.method.owner == method.owner
+          return signature if signature && are_equal?(signature.method.owner, method.owner)
 
           # Widen the type of `prepended_method` to be nilable
           prepended_method = constant.instance_method(method.name) #: UnboundMethod?
 
-          while prepended_method && prepended_method.owner != method.owner
+          while prepended_method && !are_equal?(prepended_method.owner, method.owner)
             signature = signature_of(prepended_method)
-            return signature if signature && signature.method.owner == method.owner
+            return signature if signature && are_equal?(signature.method.owner, method.owner)
 
             prepended_method = prepended_method.super_method
           end
