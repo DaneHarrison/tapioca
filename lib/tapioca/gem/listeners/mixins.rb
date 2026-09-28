@@ -75,7 +75,12 @@ module Tapioca
 
         #: (Module[top] constant) -> Array[Module[top]]
         def interesting_ancestors_of(constant)
-          inherited_ancestors = Set.new.compare_by_identity.merge(inherited_ancestors_of(constant))
+          # Anonymous superclasses are left out of the RBI, so their mixins are compiled on the constant.
+          # Only drop the ancestors inherited from the first named superclass.
+          last_anonymous_superclass = @pipeline.anonymous_superclasses_of(constant).last
+          inherited_ancestors = Set.new.compare_by_identity.merge(
+            inherited_ancestors_of(last_anonymous_superclass || constant),
+          )
 
           # TODO: There is actually a bug here where this will drop modules that
           # may be included twice. For example:
