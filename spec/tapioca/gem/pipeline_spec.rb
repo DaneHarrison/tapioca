@@ -1883,6 +1883,52 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       assert_equal(output, compile)
     end
 
+    it "compiles source locations of methods from an anonymous superclass" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Struct.new(:x) do
+          extend T::Sig
+
+          sig { returns(Integer) }
+          def double; x * 2; end
+        end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:6
+        class Point < ::Struct
+          # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:5
+          sig { returns(::Integer) }
+          def double; end
+
+          # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+          def x; end
+
+          # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+          def x=(_); end
+
+          class << self
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def [](*_arg0); end
+
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def inspect; end
+
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def keyword_init?; end
+
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def members; end
+
+            # pkg:gem/#{DEFAULT_GEM_NAME}#lib/point.rb:1
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile(include_loc: true))
+    end
+
     it "compiles Struct anonymous superclass methods overridden by a prepended module" do
       add_ruby_file("point.rb", <<~RUBY)
         module Rounded
