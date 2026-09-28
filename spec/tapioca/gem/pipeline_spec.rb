@@ -1678,7 +1678,19 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
         end
 
         module M3; end
-        class S1 < ::Struct; end
+
+        class S1 < ::Struct
+          def foo; end
+          def foo=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
 
         class S2 < ::Struct
           def foo; end
@@ -1707,6 +1719,50 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
         end
 
         class S4 < ::Struct; end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles methods of Struct anonymous superclasses the same as the block form" do
+      add_ruby_file("ssl_options.rb", <<~RUBY)
+        class SSLOptions < Struct.new(:verify_hostname)
+          def verify?; end
+        end
+
+        BlockSSLOptions = Struct.new(:verify_hostname) do
+          def verify?; end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class BlockSSLOptions < ::Struct
+          def verify?; end
+          def verify_hostname; end
+          def verify_hostname=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class SSLOptions < ::Struct
+          def verify?; end
+          def verify_hostname; end
+          def verify_hostname=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
       RBI
 
       assert_equal(output, compile)

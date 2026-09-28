@@ -186,13 +186,18 @@ module Tapioca
         # It walks up the ancestor tree via the `super_method` method; if any of the super
         # methods are owned by the constant, it means that the constant declares the method,
         # and that super method is returned.
+        #
+        # Methods owned by the constant's anonymous superclasses also count, since those
+        # superclasses are not part of the RBI and their methods would otherwise be lost.
         #: (UnboundMethod method, Module[top] constant) -> UnboundMethod?
         def method_defined_by_constant(method, constant)
+          owners = [constant, *@pipeline.anonymous_superclasses_of(constant)]
           # Widen the type of `method` to be nilable
           method = method #: UnboundMethod?
 
           while method
-            return method if method.owner == constant
+            # Compare by identity, since the constant or its anonymous superclasses can override `==`
+            return method if owners.any? { |owner| are_equal?(owner, method.owner) }
 
             method = method.super_method
           end

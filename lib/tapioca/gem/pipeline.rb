@@ -26,6 +26,7 @@ module Tapioca
         @gem = gem
         @seen = Set.new #: Set[String]
         @alias_namespace = Set.new #: Set[String]
+        @anonymous_superclasses = {}.compare_by_identity #: Hash[Module[top], Array[Module[top]]]
         @error_handler = error_handler
 
         @events = [] #: Array[Gem::Event]
@@ -187,6 +188,34 @@ module Tapioca
 
         name = "Struct" if name =~ /^(::)?Struct::[^:]+$/
         name
+      end
+
+      # Return the unnamed superclasses between the constant and its first named superclass,
+      # like the ones created by `class Foo < Struct.new(:bar)`, `Data.define` or `Class.new`.
+      # These superclasses are left out of the RBI, so their methods and mixins belong to the constant.
+      # For a singleton class, return the singleton classes of its attached class' anonymous superclasses.
+      #: (Module[top] constant) -> Array[Module[top]]
+      def anonymous_superclasses_of(constant)
+        @anonymous_superclasses[constant] ||= begin
+          superclasses = [] #: Array[Module[top]]
+
+          if constant.singleton_class?
+            # Singleton classes have no names, so find the anonymous superclasses through the attached class
+            attached_class = attached_class_of(T.cast(constant, T::Class[T.anything]))
+            if attached_class
+              superclasses = anonymous_superclasses_of(attached_class).map { |klass| singleton_class_of(klass) }
+            end
+          elsif Class === constant
+            superclass = superclass_of(constant) #: Class[top]?
+
+            while superclass && name_of(superclass).nil?
+              superclasses << superclass
+              superclass = superclass_of(superclass)
+            end
+          end
+
+          superclasses
+        end
       end
 
       private
