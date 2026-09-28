@@ -1718,7 +1718,18 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
           end
         end
 
-        class S4 < ::Struct; end
+        class S4 < ::Struct
+          def foo; end
+          def foo=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
       RBI
 
       assert_equal(output, compile)
@@ -1766,6 +1777,145 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       RBI
 
       assert_equal(output, compile)
+    end
+
+    it "compiles methods of named Struct superclasses" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Struct.new("NamedPoint", :x) do
+          def double; end
+        end
+        end
+
+        class Point3D < Point
+          def z; end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          def double; end
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class Point3D < ::Point
+          def z; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles named Struct superclasses like aws-sdk-core's EmptyStructure" do
+      add_ruby_file("structure.rb", <<~RUBY)
+        module Aws
+          module Structure
+            def initialize(values = {})
+              values.each do |k, v|
+                self[k] = v
+              end
+            end
+
+            def key?(member_name)
+              !self[member_name].nil?
+            end
+          end
+
+          class EmptyStructure < Struct.new("AwsEmptyStructure")
+            include(Aws::Structure)
+          end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        module Aws; end
+
+        class Aws::EmptyStructure < ::Struct
+          include ::Aws::Structure
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Aws::Structure
+          def initialize(values = T.unsafe(nil)); end
+
+          def key?(member_name); end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles named Struct superclasses defined in other gems" do
+      mock_gem("aws") do
+        add_ruby_file("lib/aws.rb", <<~RUBY)
+          EmptyStructure = Struct.new("EmptyStructure")
+          Credentials = Struct.new("Credentials", :key)
+        RUBY
+      end
+
+      mock_gem("foo") do
+        add_ruby_file("lib/foo.rb", <<~RUBY)
+          class EmptyA < EmptyStructure; end
+          class EmptyB < EmptyStructure; end
+
+          class FooCredentials < Credentials
+            def secret; end
+          end
+        RUBY
+      end
+
+      output = <<~RBI
+        class EmptyA < ::Struct
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class EmptyB < ::Struct
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class FooCredentials < ::Struct
+          def key; end
+          def key=(_); end
+          def secret; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile("foo"))
     end
 
     it "compiles Struct anonymous superclass methods overridden or hidden by the subclass" do
