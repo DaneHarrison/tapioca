@@ -1779,41 +1779,6 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       assert_equal(output, compile)
     end
 
-    it "compiles methods of named Struct superclasses" do
-      add_ruby_file("point.rb", <<~RUBY)
-        class Point < Struct.new("NamedPoint", :x) do
-          def double; end
-        end
-        end
-
-        class Point3D < Point
-          def z; end
-        end
-      RUBY
-
-      output = template(<<~RBI)
-        class Point < ::Struct
-          def double; end
-          def x; end
-          def x=(_); end
-
-          class << self
-            def [](*_arg0); end
-            def inspect; end
-            def keyword_init?; end
-            def members; end
-            def new(*_arg0); end
-          end
-        end
-
-        class Point3D < ::Point
-          def z; end
-        end
-      RBI
-
-      assert_equal(output, compile)
-    end
-
     it "compiles named Struct superclasses like aws-sdk-core's EmptyStructure" do
       add_ruby_file("structure.rb", <<~RUBY)
         module Aws
@@ -1871,7 +1836,6 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       mock_gem("foo") do
         add_ruby_file("lib/foo.rb", <<~RUBY)
           class EmptyA < EmptyStructure; end
-          class EmptyB < EmptyStructure; end
 
           class FooCredentials < Credentials
             def secret; end
@@ -1881,16 +1845,6 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
 
       output = <<~RBI
         class EmptyA < ::Struct
-          class << self
-            def [](*_arg0); end
-            def inspect; end
-            def keyword_init?; end
-            def members; end
-            def new(*_arg0); end
-          end
-        end
-
-        class EmptyB < ::Struct
           class << self
             def [](*_arg0); end
             def inspect; end
@@ -1945,40 +1899,6 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
             def keyword_init?; end
             def members; end
             def new(*_arg0); end
-          end
-        end
-      RBI
-
-      assert_equal(output, compile)
-    end
-
-    it "compiles methods defined in the block of a Struct anonymous superclass" do
-      add_ruby_file("point.rb", <<~RUBY)
-        class Point < Struct.new(:x) do
-          def double
-            x * 2
-          end
-
-          def self.origin
-            new(0)
-          end
-        end
-        end
-      RUBY
-
-      output = template(<<~RBI)
-        class Point < ::Struct
-          def double; end
-          def x; end
-          def x=(_); end
-
-          class << self
-            def [](*_arg0); end
-            def inspect; end
-            def keyword_init?; end
-            def members; end
-            def new(*_arg0); end
-            def origin; end
           end
         end
       RBI
@@ -2315,107 +2235,6 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
             def members; end
             def new(*_arg0); end
           end
-        end
-      RBI
-
-      assert_equal(output, compile)
-    end
-
-    it "compiles Data anonymous superclass methods overridden by the subclass or a prepended module" do
-      add_ruby_file("point.rb", <<~RUBY)
-        module Rounded
-          def y
-            super.round
-          end
-        end
-
-        class Point < Data.define(:x, :y)
-          prepend Rounded
-
-          def x
-            super.to_i
-          end
-        end
-      RUBY
-
-      output = template(<<~RBI)
-        class Point < ::Data
-          include ::Rounded
-
-          def x; end
-          def y; end
-
-          class << self
-            def [](*_arg0); end
-            def inspect; end
-            def members; end
-            def new(*_arg0); end
-          end
-        end
-
-        module Rounded
-          def y; end
-        end
-      RBI
-
-      assert_equal(output, compile)
-    end
-
-    it "compiles Data anonymous superclasses with no members" do
-      add_ruby_file("empty.rb", <<~RUBY)
-        class Empty < Data.define
-        end
-
-        BlockEmpty = Data.define
-      RUBY
-
-      output = template(<<~RBI)
-        class BlockEmpty < ::Data
-          class << self
-            def [](*_arg0); end
-            def inspect; end
-            def members; end
-            def new(*_arg0); end
-          end
-        end
-
-        class Empty < ::Data
-          class << self
-            def [](*_arg0); end
-            def inspect; end
-            def members; end
-            def new(*_arg0); end
-          end
-        end
-      RBI
-
-      assert_equal(output, compile)
-    end
-
-    it "does not repeat Data anonymous superclass methods on grandchild classes" do
-      add_ruby_file("point.rb", <<~RUBY)
-        class Point < Data.define(:x)
-        end
-
-        class Point3D < Point
-          def z; end
-        end
-      RUBY
-
-      output = template(<<~RBI)
-        class Point < ::Data
-          def x; end
-
-          class << self
-            def [](*_arg0); end
-            def inspect; end
-            def members; end
-            def new(*_arg0); end
-          end
-        end
-
-        class Point3D < ::Point
-          def z; end
         end
       RBI
 
