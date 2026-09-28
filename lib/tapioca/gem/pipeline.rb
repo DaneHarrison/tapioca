@@ -194,8 +194,9 @@ module Tapioca
         name
       end
 
-      # Return the unnamed superclasses between the constant and its first named superclass,
-      # like the ones created by `class Foo < Struct.new(:bar)`, `Data.define` or `Class.new`.
+      # Return the superclasses between the constant and its first superclass that is written to the RBI,
+      # like the unnamed ones created by `class Foo < Struct.new(:bar)`, `Data.define` or `Class.new`,
+      # and named structs like `Struct.new("Bar", :baz)`, which are written as `Struct`.
       # These superclasses are left out of the RBI, so their methods and mixins belong to the constant.
       # For a singleton class, return the singleton classes of its attached class' anonymous superclasses.
       #: (Module[top] constant) -> Array[Module[top]]
@@ -212,7 +213,7 @@ module Tapioca
           elsif Class === constant
             superclass = superclass_of(constant) #: Class[top]?
 
-            while superclass && name_of(superclass).nil?
+            while superclass && left_out_of_rbi?(superclass)
               superclasses << superclass
               superclass = superclass_of(superclass)
             end
@@ -223,6 +224,13 @@ module Tapioca
       end
 
       private
+
+      # `name_of` renames named structs like `Struct::Bar` to `Struct`, so they are left out of the RBI too
+      #: (Class[top] superclass) -> bool
+      def left_out_of_rbi?(superclass)
+        name = name_of(superclass)
+        name.nil? || (name == "Struct" && !are_equal?(superclass, ::Struct))
+      end
 
       #: (Gemfile::GemSpec gem) -> Set[String]
       def load_bootstrap_symbols(gem)
