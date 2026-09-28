@@ -34,7 +34,12 @@ module Tapioca
         # @override
         #: (MethodNodeAdded event) -> void
         def on_method(event)
-          definition = @pipeline.method_definition_in_gem(event.method.name, event.constant)
+          # Methods from anonymous superclasses are tracked for the anonymous superclass, not the constant
+          owner = event.method.owner
+          anonymous_superclass = @pipeline.anonymous_superclasses_of(event.constant).find do |superclass|
+            Runtime::Reflection.are_equal?(superclass, owner)
+          end
+          definition = @pipeline.method_definition_in_gem(event.method.name, anonymous_superclass || event.constant)
 
           if Pipeline::MethodInGemWithLocation === definition
             loc = definition.location
