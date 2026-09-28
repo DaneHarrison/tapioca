@@ -213,8 +213,7 @@ module Tapioca
         # Check whether the method is defined by one of the constant's anonymous superclasses.
         #: (UnboundMethod method, Module[top] constant) -> bool
         def owned_by_anonymous_superclass?(method, constant)
-          owner = method.owner
-          @pipeline.anonymous_superclasses_of(constant).any? { |superclass| are_equal?(superclass, owner) }
+          @pipeline.anonymous_superclasses_of(constant).any? { |superclass| are_equal?(superclass, method.owner) }
         end
 
         # Return the signature declared on the given method, or nil if it has none.
