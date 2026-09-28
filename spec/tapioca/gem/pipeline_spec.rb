@@ -1966,6 +1966,95 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       assert_equal(output, compile)
     end
 
+    it "compiles Struct anonymous superclass methods behind a module prepended into the anonymous superclass" do
+      add_ruby_file("point.rb", <<~RUBY)
+        module Rounded
+          def x
+            super.round
+          end
+        end
+
+        class Point < Struct.new(:x) { prepend Rounded }
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          include ::Rounded
+
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Rounded
+          def x; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles mixins of Struct and Data anonymous superclasses" do
+      add_ruby_file("point.rb", <<~RUBY)
+        module Helpers; end
+        module ClassHelpers; end
+
+        class Point < Struct.new(:x) do
+          include Helpers
+          extend ClassHelpers
+        end
+        end
+
+        class Coordinate < Data.define(:x) { include Comparable }
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        module ClassHelpers; end
+
+        class Coordinate < ::Data
+          include ::Comparable
+
+          def x; end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Helpers; end
+
+        class Point < ::Struct
+          include ::Helpers
+          extend ::ClassHelpers
+
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
     it "does not repeat Struct anonymous superclass methods on grandchild classes" do
       add_ruby_file("point.rb", <<~RUBY)
         class Point < Struct.new(:x)
