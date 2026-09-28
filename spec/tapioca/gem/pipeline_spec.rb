@@ -1768,6 +1768,143 @@ class Tapioca::Gem::PipelineSpec < Minitest::HooksSpec
       assert_equal(output, compile)
     end
 
+    it "compiles Struct anonymous superclass methods overridden or hidden by the subclass" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Struct.new(:x, :y, keyword_init: true)
+          def x
+            super.to_i
+          end
+
+          private :y=
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          def x; end
+          def x=(_); end
+          def y; end
+
+          private
+
+          def y=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles methods defined in the block of a Struct anonymous superclass" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Struct.new(:x) do
+          def double
+            x * 2
+          end
+
+          def self.origin
+            new(0)
+          end
+        end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          def double; end
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+            def origin; end
+          end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "compiles Struct anonymous superclass methods overridden by a prepended module" do
+      add_ruby_file("point.rb", <<~RUBY)
+        module Rounded
+          def x
+            super.round
+          end
+        end
+
+        class Point < Struct.new(:x)
+          prepend Rounded
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          include ::Rounded
+
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        module Rounded
+          def x; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
+    it "does not repeat Struct anonymous superclass methods on grandchild classes" do
+      add_ruby_file("point.rb", <<~RUBY)
+        class Point < Struct.new(:x)
+        end
+
+        class Point3D < Point
+          def z; end
+        end
+      RUBY
+
+      output = template(<<~RBI)
+        class Point < ::Struct
+          def x; end
+          def x=(_); end
+
+          class << self
+            def [](*_arg0); end
+            def inspect; end
+            def keyword_init?; end
+            def members; end
+            def new(*_arg0); end
+          end
+        end
+
+        class Point3D < ::Point
+          def z; end
+        end
+      RBI
+
+      assert_equal(output, compile)
+    end
+
     it "handles dynamic mixins" do
       add_ruby_file("foo.rb", <<~RUBY)
         module Foo
