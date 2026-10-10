@@ -57,6 +57,8 @@ jobs:
       RAILS_VERSION: ${{ matrix.rails }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Start PostgreSQL
+        run: docker compose up --detach postgres
       - name: Install protobuf
         run: |
           curl -OL https://github.com/google/protobuf/releases/download/v25.3/protoc-25.3-linux-x86_64.zip
@@ -78,8 +80,12 @@ jobs:
             bundle config set --local frozen true
           fi
           bundle install --jobs 4
+      - name: Wait for PostgreSQL
+        run: docker compose up --detach --wait postgres
       - name: Run tests
         run: bin/test
+        env:
+          POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tapioca_test
         continue-on-error: ${{ !!matrix.experimental }}
 
   buildall:

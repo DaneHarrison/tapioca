@@ -1510,6 +1510,250 @@ module Tapioca
               end
             end
           end
+
+          describe "decorate with PostgreSQL" do
+            before do
+              unless ENV["POSTGRES_URL"]
+                skip(<<~MSG)
+                  Set POSTGRES_URL to run PostgreSQL tests. To start PostgreSQL, run `docker compose up -d --wait postgres`
+                  and set POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tapioca_test
+                MSG
+              end
+
+              ::ActiveRecord::Base.establish_connection(ENV["POSTGRES_URL"])
+              begin
+                ::ActiveRecord::Base.connection.verify!
+              rescue ::ActiveRecord::ConnectionNotEstablished => e
+                raise "Could not connect to POSTGRES_URL. Is PostgreSQL running? (#{e.message.lines.first&.strip})"
+              end
+              ::ActiveRecord::Base.connection.begin_transaction(joinable: false)
+              @postgres_transaction_open = true #: bool?
+            end
+
+            after do
+              ::ActiveRecord::Base.connection.rollback_transaction if @postgres_transaction_open
+            end
+
+            it "generates String for uuid columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts do |t|
+                      t.uuid :uuid_column
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(::String)).returns(T.nilable(::String)) }
+                def uuid_column=(value); end
+              RBI
+              assert_includes(rbi_for(:Post), expected)
+            end
+
+            it "generates IPAddr for cidr and inet columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts do |t|
+                      t.cidr :cidr_column
+                      t.inet :inet_column
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              output = rbi_for(:Post)
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(::IPAddr)).returns(T.nilable(::IPAddr)) }
+                def cidr_column=(value); end
+              RBI
+              assert_includes(output, expected)
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(::IPAddr)).returns(T.nilable(::IPAddr)) }
+                def inet_column=(value); end
+              RBI
+              assert_includes(output, expected)
+            end
+
+            it "generates Hash for hstore columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    enable_extension "hstore"
+
+                    create_table :posts do |t|
+                      t.hstore :hstore_column
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(T::Hash[::String, ::String])).returns(T.nilable(T::Hash[::String, ::String])) }
+                def hstore_column=(value); end
+              RBI
+              assert_includes(rbi_for(:Post), expected)
+            end
+
+            it "generates Duration for interval columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts do |t|
+                      t.interval :interval_column
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(::ActiveSupport::Duration)).returns(T.nilable(::ActiveSupport::Duration)) }
+                def interval_column=(value); end
+              RBI
+              assert_includes(rbi_for(:Post), expected)
+            end
+
+            it "generates Array of the subtype for array columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts do |t|
+                      t.string :array_column, array: true
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(T::Array[::String])).returns(T.nilable(T::Array[::String])) }
+                def array_column=(value); end
+              RBI
+              assert_includes(rbi_for(:Post), expected)
+            end
+
+            it "generates String for bit columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts do |t|
+                      t.bit :bit_column
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(::String)).returns(T.nilable(::String)) }
+                def bit_column=(value); end
+              RBI
+              assert_includes(rbi_for(:Post), expected)
+            end
+
+            it "generates String for bit varying columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts do |t|
+                      t.bit_varying :bit_varying_column
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(::String)).returns(T.nilable(::String)) }
+                def bit_varying_column=(value); end
+              RBI
+              assert_includes(rbi_for(:Post), expected)
+            end
+
+            it "generates Range of the subtype for range columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_table :posts do |t|
+                      t.int4range :range_column
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(T::Range[::Integer])).returns(T.nilable(T::Range[::Integer])) }
+                def range_column=(value); end
+              RBI
+              assert_includes(rbi_for(:Post), expected)
+            end
+
+            it "generates String for enum columns" do
+              add_ruby_file("schema.rb", <<~RUBY)
+                ActiveRecord::Migration.suppress_messages do
+                  ActiveRecord::Schema.define do
+                    create_enum :status, ["draft", "published"]
+
+                    create_table :posts do |t|
+                      t.enum :enum_column, enum_type: :status
+                    end
+                  end
+                end
+              RUBY
+
+              add_ruby_file("post.rb", <<~RUBY)
+                class Post < ActiveRecord::Base
+                end
+              RUBY
+
+              expected = indented(<<~RBI, 4)
+                sig { params(value: T.nilable(::String)).returns(T.nilable(::String)) }
+                def enum_column=(value); end
+              RBI
+              assert_includes(rbi_for(:Post), expected)
+            end
+          end
         end
       end
     end

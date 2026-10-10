@@ -40,6 +40,7 @@ group :development, :test do
   end
 
   gem "sqlite3"
+  gem "pg"
   gem "mutex_m"
   gem "smart_properties"
   # Needed for Ruby 4.0 compatibility
