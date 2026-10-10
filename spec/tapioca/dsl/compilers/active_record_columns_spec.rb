@@ -1521,11 +1521,17 @@ module Tapioca
               end
 
               ::ActiveRecord::Base.establish_connection(ENV["POSTGRES_URL"])
+              begin
+                ::ActiveRecord::Base.connection.verify!
+              rescue ::ActiveRecord::ConnectionNotEstablished => e
+                raise "Could not connect to POSTGRES_URL. Is PostgreSQL running? (#{e.message.lines.first&.strip})"
+              end
               ::ActiveRecord::Base.connection.begin_transaction(joinable: false)
+              @postgres_transaction_open = true #: bool?
             end
 
             after do
-              ::ActiveRecord::Base.connection.rollback_transaction if ENV["POSTGRES_URL"]
+              ::ActiveRecord::Base.connection.rollback_transaction if @postgres_transaction_open
             end
 
             it "generates String for uuid columns" do
